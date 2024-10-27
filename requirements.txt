@@ -1,0 +1,8 @@
+pandas
+shiny
+shinywidgets
+plotly
+palmerpenguins
+matplotlib
+seaborn
+pathlib
