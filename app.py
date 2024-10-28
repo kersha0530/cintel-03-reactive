@@ -9,128 +9,111 @@ from shiny import reactive
 from shiny.express import render, ui
 import seaborn as sns
 
+
 # Load the Palmer Penguins dataset
 penguins_df = palmerpenguins.load_penguins()
 
 # Optional title for the app
 app_title = "Penguins Dataset Exploration"
 
-
-@reactive.calc
-def dat():
-    infile = Path(__file__).parent / "penguins.csv"
-    return pandas.read_csv(infile)
-
-# Get the columns for the dropdown menu
-@reactive.Calc
-def dropdown_columns():
-    return ["island", "bill_length_mm", "bill_depth_mm", "body_mass_g", "sex", "year"]
-
-
-# Define the reactive dataset function
-@reactive.Calc
-def filtered_data():
-    data = penguins_df[
-        penguins_df['species'].isin(input.selected_species_list()) &
-        penguins_df['island'].isin(input.selected_island_list())
-    ]
-    return
-
-from shiny.express import ui
-
-
+# UI Layout for the App
+ui.page_opts(title="Kersha Palmer Penguin Dataset Exploration", fillable=True)
 
 with ui.sidebar(bg="#f8f8f8"):
-    ui.input_slider("n", "N", 0, 100, 20)
-    ui.input_selectize("selected_attribute", "Select attribute", ["species", "island", "bill_length_mm", "bill_depth_mm", "body_mass_g", "sex", "year"]),
-    # Create a checkbox group input for penguin species
-    ui.input_checkbox_group(
-        "checkbox_group", 
-        "Penguin Species", 
-        {
-            "Chinstrap": "Chinstrap",
-            "Gentoo": "Gentoo",
-            "Adelie": "Adelie",
-        }
-    )
-    # Create a checkbox group input for islands
-    ui.input_checkbox_group(
-        "island_checkbox_group", 
-        "Select Islands", 
-        {
-            "Biscoe": "Biscoe",
-            "Dream": "Dream",
-            "Torgersen": "Torgersen"
-        }
-    )
- 
-
-
-@render.text
-def value():
-    return ", ".join(input.checkbox_group())
-
-
-"Main content"  
+    ui.input_selectize("selected_species_list", "Select Species", ["Adelie", "Gentoo", "Chinstrap"], multiple=True)
+    ui.input_selectize("selected_island_list", "Select Island", ["Biscoe", "Dream", "Torgersen"], multiple=True)
+    ui.input_slider("flipper_length_mm", "Flipper length (mm)", 150, 250, (150, 250))
+    ui.input_slider("bill_depth_mm", "Bill depth (mm)", 13, 21, (13, 21))
+    ui.input_slider("bill_length_mm", "Bill length (mm)", 30, 60, (30, 60))
+    ui.input_slider("body_mass_g", "Body mass (g)", 2500, 6500, (2500, 6500))
+    ui.input_selectize("sex", "Select Sex", ["Male", "Female"])
+    ui.input_slider("year", "Select Year", 2007, 2009, 2008)
 
 with ui.navset_card_underline():
-
-    with ui.nav_panel("Data frame"):
-
-        @render.data_frame
-        def frame():
-            # Give dat() to render.DataGrid to customize the grid
-            return dat()
-
-    with ui.nav_panel("Table"):
-
+    with ui.nav_panel("Filtered Table"):
         @render.table
-        def table():
-            return dat()
+        def filtered_table():
+            return filtered_data()
 
+    with ui.nav_panel("Histogram"):
+        @render_plotly
+        def plotly_histogram():
+            filtered_df = filtered_data()
+            return px.histogram(filtered_df, x="flipper_length_mm", color="species", 
+                                 title="Flipper Length Histogram")
 
-ui.page_opts(title="Kersha Palmer Penguin Dataset Exploration", fillable=True)
-with ui.layout_columns():
+    with ui.nav_panel("Scatterplot"):
+        @render_plotly
+        def plotly_scatterplot():
+            filtered_df = filtered_data()
+            return px.scatter(filtered_df, x="flipper_length_mm", y="bill_length_mm", color="species",
+                               title="Flipper Length vs. Bill Length")
 
+    with ui.nav_panel("Seaborn Histogram"):
+        @render.plot
+        def seaborn_histogram():
+            filtered_df = filtered_data()
+            fig, ax = plt.subplots()
+            sns.histplot(data=filtered_df, x="body_mass_g", hue="species", multiple="stack", ax=ax)
+            ax.set_title("Body Mass Distribution (Seaborn)")
+            ax.set_xlabel("Mass (g)")
+            ax.set_ylabel("Count")
+            return fig
 
+# Reactive function to filter data
+@reactive.Calc
+def filtered_data():
+    data = penguins_df.copy()
 
+    # Filter by species
+    selected_species = input.selected_species_list()
+    if selected_species:
+        data = data[data['species'].isin(selected_species)]
+    
+    # Filter by islands
+    selected_islands = input.selected_island_list()
+    if selected_islands:
+        data = data[data['island'].isin(selected_islands)]
+
+    # Filter by flipper length
+    flipper_length = input.flipper_length_mm
+    if isinstance(flipper_length, list) and len(flipper_length) == 2:
+        data = data[(data['flipper_length_mm'] >= flipper_length[0]) & 
+                    (data['flipper_length_mm'] <= flipper_length[1])]
+
+    # Additional filtering can go here...
+
+    return data
+
+# Server logic
+def server(input, output, session):
+    @output
+    @render.table
+    def filtered_table():
+        return filtered_data()
+
+    @output
     @render_plotly
     def plotly_histogram():
-        # Plotly histogram showing the distribution of the selected attribute for the selected species
-        return px.histogram(penguins_df, x="flipper_length_mm", y="bill_length_mm", color="species", 
-                          title="Flipper Length vs. Bill Length")
+        filtered_df = filtered_data()
+        return px.histogram(filtered_df, x="flipper_length_mm", color="species", title="Flipper Length Histogram")
 
+    @output
     @render_plotly
     def plotly_scatterplot():
-        # Scatterplot of flipper length vs. bill length with species colored
-        return px.scatter(penguins_df, x="flipper_length_mm", y="bill_length_mm", color="species", 
-                          title="Flipper Length vs. Bill Length")
+        filtered_df = filtered_data()
+        return px.scatter(filtered_df, x="flipper_length_mm", y="bill_length_mm", color="species", title="Flipper Length vs. Bill Length")
 
-
-@render.plot
-def seaborn_histogram():
-    # Ensure the dataset is loaded
-    penguins_df = dat()
-    
-    # Seaborn histogram showing the body mass of penguins
-    fig, ax = plt.subplots()
-    sns.histplot(data=penguins_df, x="body_mass_g", hue="species", multiple="stack", ax=ax)
-    ax.set_title("Body Mass Distribution (Seaborn)")
-    ax.set_xlabel("Mass (g)")
-    ax.set_ylabel("Count")
-    return fig
-
-
-    @render_plotly
-    def plotly_histogram():
-        # Plotly histogram showing distribution of all species
-        filtered_df = penguins_df[penguins_df['species'].isin(input.selected_species_list())]
-        return px.histogram(filtered_df, x=input.selected_attribute(), nbins=input.plotly_bin_count())
-
-    @render.table
-    def penguins_grid():
-        # Render full dataset as a data grid (basic for now, can be enhanced)
-        return penguins_df
+    @output
+    @render.plot
+    def seaborn_histogram():
+        filtered_df = filtered_data()
+        fig, ax = plt.subplots()
+        sns.histplot(data=filtered_df, x="body_mass_g", hue="species", multiple="stack", ax=ax)
+        ax.set_title("Body Mass Distribution (Seaborn)")
+        ax.set_xlabel("Body Mass (g)")
+        ax.set_ylabel("Count")
+        return fig
 
     @render.table
     def penguins_table():
