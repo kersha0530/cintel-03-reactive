@@ -115,7 +115,12 @@ def server(input, output, session):
         ax.set_ylabel("Count")
         return fig
 
-    @render.table
-    def penguins_table():
-        # Render full dataset as a table
-        return penguins_df
+
+def create_hyperlink(text, href, target="_blank"):
+    return f'<a href="{href}" target="{target}">{text}</a>'
+
+# Usage
+hyperlink = create_hyperlink("Cintel-3 Interactive File", href="https://github.com/kersha0530/cintel-3-reactive", target="_blank")
+print(hyperlink)
+
+
